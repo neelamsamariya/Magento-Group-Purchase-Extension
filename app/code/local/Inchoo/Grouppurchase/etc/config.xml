@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<config>
+    <modules>
+        <Inchoo_Grouppurchase>
+            <version>1.0.0</version>
+        </Inchoo_Grouppurchase>
+    </modules>
+     
+    <global>
+        <helpers>
+            <grouppurchase>
+                <class>Inchoo_Grouppurchase_Helper</class>
+            </grouppurchase>
+        </helpers>
+    </global> 
+	<frontend>
+        <routers>
+            <catalog>
+                <args>
+                    <modules>
+                        <Inchoo_Grouppurchase before="Mage_Catalog">Inchoo_Grouppurchase</Inchoo_Grouppurchase>
+                    </modules>
+                </args>
+            </catalog>
+        </routers>
+    </frontend>    
+</config>

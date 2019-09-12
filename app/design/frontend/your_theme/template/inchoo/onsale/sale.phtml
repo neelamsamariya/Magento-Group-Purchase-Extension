@@ -1,0 +1,649 @@
+<script type="text/javascript" src="<?php echo $this->getSkinUrl(); ?>js/jquery-1.11.0.min.js"></script>
+<script>jQuery.noConflict();</script>
+<?php
+
+ 
+//$helper = Mage::helper('grouppurchase');
+//$helper->getTest();
+
+$tree = $this->helper('grouppurchase')->getCategoriesDropdown(); 
+/*echo '<pre>';
+print_r($tree['root_categories']);
+echo '</pre>';*/
+?>
+<script type="text/javascript">
+
+jQuery("document").ready(function(){
+	
+	jQuery(".addCF").click(function(){
+		
+		var rowCount = jQuery('#group_table tr').length;
+		//alert('row===='+rowCount);
+		var newRow = rowCount + 1; 
+		//alert('newrow===='+newRow);
+		var lastListItem = jQuery('#group_table tr:last').attr("id");
+		var newinsertedid = parseInt(lastListItem) + 1;
+		//alert('new===='+newinsertedid);
+		var arrayFromPHP = JSON.parse( '<?php echo json_encode($tree['root_categories']) ?>' );		
+		var opt_tag = "";
+		opt_tag = '<option value="">Select</option>';		
+		var i;
+		for (i = 0; i < arrayFromPHP.length; ++i) {			
+			//alert(arrayFromPHP[i].cat_id);
+			opt_tag += '<option value="'+arrayFromPHP[i].cat_id+'">'+arrayFromPHP[i].cat_name+'</option>';
+		}
+		
+		
+		jQuery("#group_table").append('<tr valign="top" id="'+ newinsertedid +'"><td><select id="first_cat_'+ newinsertedid +'" onchange="showCat(this, 2,'+newinsertedid+')" name="first_cat[]">'+opt_tag+'</select></td><td><select id="second_cat_'+ newinsertedid +'" onchange="showCat(this, 3,'+newinsertedid+')" name="second_cat[]"><option value="">Select</option></select><select id="third_cat_'+ newinsertedid +'" onchange="showCat(this, 4,'+newinsertedid+')" style="display:none;" name="third_cat[]"><option value="">Select</option></select></td><td><select id="cat_products_'+ newinsertedid +'" name="cat_products[]" class="prodts"></select></td><td><div class="upperset"><input type="button" class="dec button" id="minus_'+ newinsertedid +'" value="" data-content="-" /><input type="text" name="prod_qty[]" id="prod_qty_'+ newinsertedid +'" value="1" maxlength="3" disabled="disabled" class="pr_qty"><input type="button"  class="inc button" id="plus_'+ newinsertedid +'" value="" data-content="+"/></div></td><td><div class="upperset"><span id="price_'+ newinsertedid +'">$0.00</span> <input type="hidden" name="original_price[]" id="original_price_'+ newinsertedid +'" value="0" class="orig_price"/></div></td><td><div class="upperset"><input type="button" class="del remove button" id="del_'+ newinsertedid +'" value=""/></div></td></tr>');
+	});
+	
+	//for deleting the rows
+    jQuery("#group_table").on('click','.del',function(){
+        //jQuery(this).parent().parent().remove();
+		var id = this.id;		
+		var del_id = id.split('_');		
+		var row_count = del_id[1];
+		//alert(row_count);	
+		jQuery('table#group_table tr#'+row_count).remove();	
+		
+		calculate_total_rows();
+		
+    });
+	
+	//For quantity box in the table rows + and - buttons events to increase and decrrese the quantity
+	jQuery('#group_table').on('click', '.button', function(e){
+		
+		var trid = jQuery(this).closest('tr').attr('id'); // table row ID 
+		var buton_id = jQuery(this).attr('id');
+		var id_arr = buton_id.split('_');	
+		var id = id_arr[1];	
+		var $button = jQuery(this);
+		var oldValue = jQuery('#prod_qty_'+id).val();
+		var button_cont = jQuery(this).attr( "data-content" );	
+		
+		if (button_cont == "+") {
+		  var newVal = parseFloat(oldValue) + 1;
+		} else {
+		   // Don't allow decrementing below zero
+		  if (oldValue > 1) {
+			var newVal = parseFloat(oldValue) - 1;
+			} else {
+			newVal = 1;
+		  }
+		  }
+		 var chkproduct = jQuery('#cat_products_'+id).val(); 
+	
+		//alert(chkproduct);
+		/*if((chkproduct != "") || (chkproduct != null))*/
+		if (chkproduct != null && chkproduct != '')
+		{
+			
+			//$button.parent().find("input").val(newVal);
+			jQuery('#prod_qty_'+id).val(newVal);
+			
+			//load product price from product id
+			var url = '<?php echo $this->getUrl('catalog/product/getFinalPrice'); ?>';
+			jQuery.ajax({
+			  type: "POST",
+			  dataType: "json",			 
+			  url: url,
+			  data: { prodid: chkproduct, newprice: newVal },
+			  success :function(response) {
+			  var jsonObj = JSON.parse(JSON.stringify(response));
+			  //alert(jsonObj['plain_price']);			 
+			  jQuery('#price_'+trid).html(jsonObj['new_formatted_price']);
+			  jQuery('#original_price_'+trid).val(jsonObj['unformatted_price']);
+			  
+			  calculate_total_rows();
+			  }
+			});
+			
+		}
+		
+	});
+	
+	
+	//On product select box change also change the price and quantity
+	 jQuery(document).on('change',".prodts", function(){
+ 	 var cur_obj = jQuery(this);
+     var optionSelected = jQuery(this).val();
+	
+	 var trid = jQuery(this).closest('tr').attr('id'); // table row ID 
+	 jQuery('#prod_qty_'+trid).val('1');
+	 if(optionSelected != "")
+	 {
+		 jQuery("#prod_qty_"+trid).prop("disabled",false);		
+	 }
+	 else
+	 {
+		  jQuery("#prod_qty_"+trid).prop("disabled",true);	
+	 }
+	
+	 //alert(trid);
+	 var newValqty = 1;
+	
+	 var url = '<?php echo $this->getUrl('catalog/product/getFinalPrice'); ?>';
+			jQuery.ajax({
+			  type: "POST",
+			  dataType: "json",			 
+			  url: url,
+			  data: { prodid: optionSelected, newprice: newValqty},
+			  success :function(response) {				 
+				  var jsonObj = JSON.parse(JSON.stringify(response));	
+				   //alert(jsonObj['formatted_price']);
+				   jQuery('#price_'+trid).html(jsonObj['new_formatted_price']);
+				   jQuery('#original_price_'+trid).val(jsonObj['unformatted_price']);
+				   
+				   calculate_total_rows();
+			  }
+			});
+	
+  
+});
+
+//on quantity textbox change the price accordingly
+	jQuery(document).on("keyup",".pr_qty", function(){  
+	 //Results here
+	
+	 var cur_obj = jQuery(this);
+	 var trid = jQuery(this).closest('tr').attr('id'); // table row ID 
+	 var chkproduct = jQuery('#cat_products_'+trid).val(); 
+	 var newValqty = jQuery(this).val();
+	 //alert(newValqty);
+	// alert(chkproduct);
+	
+	 if(chkproduct != "" && newValqty != "")
+	 {
+		 var url = '<?php echo $this->getUrl('catalog/product/getFinalPrice'); ?>';
+		
+			jQuery.ajax({
+			  type: "POST",
+			  dataType: "json",			 
+			  url: url,
+			  data: { prodid: chkproduct, newprice: newValqty },
+			  success :function(response) {
+			  var jsonObj = JSON.parse(JSON.stringify(response));
+			  //alert(jsonObj['plain_price']);			 
+			  jQuery('#price_'+trid).html(jsonObj['new_formatted_price']);
+			  jQuery('#original_price_'+trid).val(jsonObj['unformatted_price']);
+			  calculate_total_rows();
+			  }
+			});
+		 
+		 
+	 }
+	 else
+	 {
+		// alert('else');
+		 newValqty = 1;
+		 var url = '<?php echo $this->getUrl('catalog/product/getFinalPrice'); ?>';
+		
+			jQuery.ajax({
+			  type: "POST",
+			  dataType: "json",			 
+			  url: url,
+			  data: { prodid: chkproduct, newprice: newValqty },
+			  success :function(response) {
+			  var jsonObj = JSON.parse(JSON.stringify(response));
+			  //alert(jsonObj['plain_price']);		
+			  jQuery('#price_'+trid).html(jsonObj['new_formatted_price']);	 
+			  jQuery('#original_price_'+trid).val(jsonObj['unformatted_price']);
+			  jQuery('#prod_qty_'+trid).val('1');
+			  }
+			});
+	 }
+	}); 
+	
+	
+	
+	 jQuery("#add_to_cart").click(function(){
+       	 var products_cart = [];			
+	  var lang_selected = jQuery('#def_lang').val();
+	 jQuery('#background-overlay').fadeIn(1000);
+         jQuery('#circularG').show();
+	    jQuery('#group_table tr').each(function (i, row) {
+					
+				  	 var trid = jQuery(this).closest('tr').attr('id'); // table row ID 
+				  	 var prod_selected = jQuery(this).find("#cat_products_"+trid).val();								
+			  		 var quantity = jQuery(this).find("input.pr_qty").val();	
+								
+					 if(jQuery('#cat_products_'+trid+' > option[value!=""]').length > 0) {
+						//alert('trid>>'+trid+'======prod id>>>>'+prod_selected+'=======qty>>>>>'+quantity);
+						
+						products_cart.push({
+						prod_id: prod_selected,
+						qty: quantity,
+						lang: lang_selected,	
+						});
+						
+					}					
+					
+			  });
+			  
+			var add_cart_url = '<?php echo $this->getUrl('catalog/product/customAddToCart'); ?>';	
+			var products_arr = JSON.stringify(products_cart);
+			//alert(products_arr);
+			jQuery.ajax({
+			  type: "POST",
+			  dataType: "json",			 
+			  url: add_cart_url,
+			  data: { p_arr: products_cart },
+			  success :function(response) {	
+				if(response == 1)
+				{
+					window.location = '<?php echo Mage::getUrl('checkout/cart'); ?>';
+				}
+			  }
+			});  
+			  
+			  
+			  
+	   		 //alert(JSON.stringify(products_cart));
+	   
+    }); 
+	
+				
+}); //document ready close
+
+
+    //For displaying all dropdowns
+    var children = $H(<?php echo json_encode($tree['children']) ?>);
+
+    function showCat(obj, level, rownumber) {
+		
+        var catId = obj.value;
+		
+		var flag = 0;
+		
+		if(level == 2)
+		{
+			jQuery('#third_cat_'+rownumber).hide();
+			var selectbox = jQuery('#cat_products_'+rownumber);
+			selectbox.empty();
+			jQuery('#prod_link_'+rownumber).html();
+			jQuery('#prod_link_'+rownumber).hide();
+			var list = '';
+			//list += '<option value="">Select Products</option>';
+			selectbox.html(list);
+			jQuery("#prod_qty_"+rownumber).val("1");
+			jQuery("#prod_qty_"+rownumber).prop("disabled",true);
+		}
+		
+        level += 1;
+		
+		//alert('level===='+level+'======cat id====='+catId);
+        if ($('cat_container_' + level)) {
+            $('cat_container_' + level).remove();
+        }
+		
+		if(catId == "")
+		{
+			jQuery("#price_"+rownumber).html("$0.00");
+		}
+        if (children.get(catId)) {
+		
+        	
+			var options = children.get(catId);
+            var html = '<select id="cat_' + catId + '" onchange="showCat(this, ' + level + ')">';
+			html += '<option value="">Select</option>';
+            for (var i = 0; i < options.length; i++) {
+                html += '<option value="' + options[i].entity_id + '">' + options[i].name + '</option>';
+            }
+            html += '</select>';
+            html = '<div id="cat_container_' + level + '">' + html + '</div>';
+			
+          
+			//$('sub_cat').insert(html);
+        }
+		else
+		{
+			
+				if(catId != "")
+				{
+					var url = '<?php echo $this->getUrl('catalog/product/getproducts'); ?>';					
+					jQuery.ajax({
+					  type: "POST",
+					  dataType: "json",			 
+					  url: url,
+					  data: { catid: catId },
+					  success :function(response) {
+					
+						var jsonObj = JSON.parse(JSON.stringify(response));				 
+						var selectbox = jQuery('#cat_products_'+rownumber);
+						selectbox.empty();
+						jQuery('#prod_link_'+rownumber).html();
+						jQuery('#prod_link_'+rownumber).hide();
+						var list = '';
+						var a_link = '';
+						//list += '<option value="">Select</option>';
+						for (var i = 0; i < jsonObj.length; i++){
+								list += '<option value="' + jsonObj[i]['id'] + '">' + jsonObj[i]['name'] + '</option>';
+								a_link = '<span class="prod_link" id="prod_link_'+rownumber+'"><a href='+ jsonObj[i]['url'] +'>Learn More</a></span>';
+						}
+						selectbox.html(list);
+						selectbox.after( a_link );
+						//var selected_value = jQuery('#cat_products_'+rownumber).val();
+						
+						if(jQuery('#cat_products_'+rownumber+' > option[value!=""]').length > 0) {
+							/*if( selected_value != "" || selected_value != null) {*/
+							
+							jQuery("#prod_qty_"+rownumber).prop("disabled",false);	
+						}
+						else
+						{
+							
+							jQuery("#prod_qty_"+rownumber).prop("disabled",true);	
+						}
+						var chkproduct = jQuery('#cat_products_'+rownumber).val(); 
+	 					var newValqty = jQuery("#prod_qty_"+rownumber).val();						
+						getTableproductPrice(chkproduct,newValqty,rownumber);						
+						
+						
+					  }
+					 
+					});					
+					
+				}
+				else
+				{
+					
+					if(level == 4)
+					{			
+						//$('sub_cat').insert(html);	
+						//again populate second select box based on first select box
+						var catId = jQuery('#first_cat_'+rownumber).val();
+						var options = children.get(catId);
+						var html = '';
+						html += '<option value="">Select</option>';
+						for (var i = 0; i < options.length; i++) {
+							html += '<option value="' + options[i].entity_id + '">' + options[i].name + '</option>';
+						}
+						html += '</select>';
+						document.getElementById("second_cat_"+rownumber).innerHTML = html;	
+						var selectbox = jQuery('#cat_products_'+rownumber);
+						selectbox.empty();
+						jQuery('#prod_link_'+rownumber).html();
+						jQuery('#prod_link_'+rownumber).hide();
+						var list = '';
+						//list += '<option value="">Select Products</option>';
+						selectbox.html(list);	
+						jQuery("#prod_qty_"+rownumber).prop("disabled",true);			
+						calculate_total_rows();
+					}
+					
+				}
+			
+				
+				//here logic to get all products
+				/*var html = '<select onchange="showCat(this, ' + level + ', '+ rownumber +')">';
+				html += '<option value="">Select</option>';
+				html += '</select>';*/
+				if(level == 4)
+				{					
+					document.getElementById("third_cat_"+rownumber).style.display = 'none';		
+					
+					flag = 1;
+				}
+				if(level == 5)
+				{					
+					var selectbox = jQuery('#cat_products_'+rownumber);
+					selectbox.empty();
+					jQuery('#prod_link_'+rownumber).html();
+					jQuery('#prod_link_'+rownumber).hide();
+					var list = '';
+					//list += '<option value="">Select Products</option>';
+					selectbox.html(list);
+					jQuery("#prod_qty_"+rownumber).prop("disabled",true);
+					
+				}
+				
+		}
+		 	if(level == 3)
+			{			
+				//$('sub_cat').insert(html);			
+				document.getElementById("second_cat_"+rownumber).innerHTML = html;
+				jQuery("#prod_qty_"+rownumber).val("1");
+				jQuery("#prod_qty_"+rownumber).prop("disabled",true);
+				calculate_total_rows();
+				
+			
+			}
+			if(level == 4)
+			{
+				
+				document.getElementById("third_cat_"+rownumber).innerHTML = html;
+						
+				if(flag == 0)
+				{
+					document.getElementById("third_cat_"+rownumber).style.display = 'inline-block';
+					var selectbox = jQuery('#cat_products_'+rownumber);
+					selectbox.empty();
+					jQuery('#prod_link_'+rownumber).html();
+					jQuery('#prod_link_'+rownumber).hide();
+					var list = '';
+					//list += '<option value="">Select Products</option>';
+					selectbox.html(list);
+					jQuery("#prod_qty_"+rownumber).prop("disabled",true);
+					calculate_total_rows();
+				}
+				
+			}
+			if(level == 5)
+			{
+				
+				if(jQuery('#cat_products_'+rownumber).val()) {
+				
+				}
+				else
+				{				
+					calculate_total_rows();
+				}
+				
+			}
+			
+    }
+	
+	
+	function getTableproductPrice(prod,qty,rownum)
+	{
+		  var url = '<?php echo $this->getUrl('catalog/product/getFinalPrice'); ?>';
+			jQuery.ajax({
+			  type: "POST",
+			  dataType: "json",			 
+			  url: url,
+			  data: { prodid: prod, newprice: qty},
+			  success :function(response) {
+			  var jsonObj = JSON.parse(JSON.stringify(response));			
+			  jQuery('#price_'+rownum).html(jsonObj['new_formatted_price']);			
+			  jQuery('#original_price_'+rownum).val(jsonObj['unformatted_price']);				
+			  
+			  
+			 // var row_price = jQuery('#original_price_'+rownum).val();
+			  //var row_qty = jQuery('#prod_qty_'+rownum).val();			 
+				calculate_total_rows();
+			 
+			 	///////////////////////////////////////////////////////////////////////////////
+				
+			  }
+			});		
+			
+	}
+	
+	function calculate_total_rows()
+	{
+		 /*************************** Calculate and display total quantity and price ************************************/
+			  var rowCount = jQuery('#group_table tr').length;			
+			  var total_price = 0;
+			  var tot_quantity = 0;
+			  jQuery('#group_table tr').each(function (i, row) {
+				  	 var trid = jQuery(this).closest('tr').attr('id'); // table row ID 
+				  	 var prod_selected = jQuery(this).find("#cat_products_"+trid).val();								
+			  		 var quantity = jQuery(this).find("input.pr_qty").val();					
+					 if(jQuery('#cat_products_'+trid+' > option[value!=""]').length > 0) {
+						//dropdown contains no non-null options
+						tot_quantity += parseInt(quantity);
+						var row_price = jQuery('#original_price_'+trid).val();
+						total_price += parseFloat(row_price);
+					}					
+					 //var row_price = jQuery('#original_price_'+trid).val();
+					 //alert('h>>>>>'+trid+'====prod_select>>>>'+ prod_selected +'=====price>>>'+row_price);
+					 //total_price += parseInt(row_price);
+					
+			  });
+			  //alert(total_price);
+			  //alert(tot_quantity);
+			    jQuery('#tot_course').html(tot_quantity);
+				if(total_price > 0)
+				{
+					jQuery("#add_to_cart").prop("disabled",false);
+					jQuery("#add_to_cart").addClass("active_button");
+					jQuery("#add_to_cart").removeClass("groupPurchaseCheckoutBtn");
+				}
+				else
+				{
+					jQuery("#add_to_cart").prop("disabled",true);
+					jQuery("#add_to_cart").addClass("groupPurchaseCheckoutBtn");
+					jQuery("#add_to_cart").removeClass("active_button");
+				}
+			  
+			 	//other ajax function call
+				var url = '<?php echo $this->getUrl('catalog/product/getTotalPriceFormatted'); ?>';
+				jQuery.ajax({
+				  type: "POST",
+				  dataType: "json",			 
+				  url: url,
+				  data: { calc_price: total_price},
+				  success :function(response) {
+				   jQuery('#tot_price').html(response);		
+				  }
+				});
+			 	///////////////////////////////////////////////////////////////////////////////
+	}
+	
+	function first_row_delete()
+	{
+		alert('Not Allowed');
+	}
+	
+	
+</script>
+<div id="circularG" style="bottom: 0;display:none;position:fixed;text-align: center;top: 40%; left:45%; z-index: 11;" class="col-md-offset-5">
+<div id="circularG_1" class="circularG">
+</div>
+<div id="circularG_2" class="circularG">
+</div>
+<div id="circularG_3" class="circularG">
+</div>
+<div id="circularG_4" class="circularG">
+</div>
+<div id="circularG_5" class="circularG">
+</div>
+<div id="circularG_6" class="circularG">
+</div>
+<div id="circularG_7" class="circularG">
+</div> 
+</div>
+<div id="background-overlay">          
+</div> 
+<div style="overflow-x:auto;width:100%;border-right:1px solid #ccc;" id="group_table_div">	
+<table class="form-table" id="group_table">
+	<tr>
+			<th>Course Type</th>
+			<th>Province</th>
+			<th>Course Name</th>
+			<th>Qty</th>
+			<th>Price</th>
+			<th>Options</th>			
+	</tr>
+	<tr valign="top" id="1">		
+        <td style="width:20%;">
+        <select id="first_cat_1" onchange="showCat(this, 2, 1)" name="first_cat[]">
+            <option value="">Select</option>
+            <?php foreach ($tree['first'] as $cat): ?>
+                <option value="<?php echo $cat->getId() ?>"><?php echo $cat->getName() ?></option>
+            <?php endforeach ?>
+        </select>
+        </td>
+        <td style="width:20%;">
+        <select id="second_cat_1" onchange="showCat(this, 3, 1)" name="second_cat[]">  
+        <option value="">Select</option>          
+        </select>
+        <select id="third_cat_1" onchange="showCat(this, 4, 1)" style="display:none;" name="third_cat[]">   
+        <option value="">Select</option>            
+        </select>
+        </td>       
+         <td style="width:20%;">
+        <select id="cat_products_1" name="cat_products[]" class="prodts">   
+        <!--<option value="">Select Products</option>   -->      
+        </select>
+        </td>
+         <td style="width:10%;">
+        <!-- <div class="dec button" id="minus_1">-</div>  -->
+        <div class="upperset">
+         <input type="button" class="dec button" id="minus_1" value="" data-content="-"/>
+         <input type="text" name="prod_qty[]" id="prod_qty_1" value="1" maxlength="3" disabled="disabled" class="pr_qty" size="1">
+         <input type="button"  class="inc button" id="plus_1" value="" data-content="+"/>        
+         </div>
+        </td>
+        <td style="width:10%;">
+        <div class="upperset">
+        <span id="price_1">$0.00</span>
+        <input type="hidden" name="original_price[]" id="original_price_1" value="0" class="orig_price"/>
+        </div>
+        </td>
+        <td style="width:10%;">
+         <div class="upperset">
+         	<input type="button" class="remove button" id="plus_1" value="" onclick="first_row_delete();"/>        
+         </div>
+        </td>
+        
+		<!--<td>
+			<input type="text" class="code" id="customFieldName" name="customFieldName[]" value="" placeholder="Input Name" /> &nbsp;
+			<input type="text" class="code" id="customFieldValue" name="customFieldValue[]" value="" placeholder="Input Value" /> &nbsp;
+			<a href="javascript:void(0);" class="addCF">Add</a>
+		</td>-->
+	</tr>
+</table>
+<table>
+<tr>
+<td colspan="5">
+<div id="newRowBtn" class="addCF">ADD NEW ROW</div>
+</td>
+</tr>
+</table>
+</div>
+<div id="buttonsContainer">
+    <div class="clear"></div>
+    <div id="priceContainer">
+        <div id="priceTitle1">YOUR TOTAL PRICE:</div>
+        <div id="tot_price">$0.00</div>
+        <input type="hidden" name="hidden_price" id="hidden_price" value="0"/>
+    </div>
+    <div id="quantityContainer">
+        <div id="quantityTitle1">TOTAL COURSES:</div>
+        <div id="tot_course">0</div>
+    </div>
+    <div class="clear"></div>
+    <input type="button"  name="add_to_cart" id="add_to_cart" value="CHECKOUT" disabled="disabled" class="groupPurchaseCheckoutBtn"/>
+    
+</div>
+<?php
+$default_lang = Mage::getResourceModel('catalog/product')
+        ->getAttribute('languages')
+        ->getSource()
+        ->getOptionId('English');	
+?>
+<input type="hidden" name="def_lang" id="def_lang" value="<?php echo $default_lang; ?>" />
+<!--<div style="border:1px solid #CCC; width:30%; float:right;">
+<table border="1">
+<tr>
+<td>Total Courses</td>
+<td>Your Total Price</td>
+</tr>
+<tr>
+<td id="tot_course">0</td>
+<td id="tot_price">$0.0</td>
+<input type="hidden" name="hidden_price" id="hidden_price" value="0"/>
+</tr>
+</table>
+</div>-->
